@@ -2,9 +2,15 @@
 # Unit tests for lib/realm.sh's install_realm()/compare_and_ask_update(): the
 # already-installed/version-compare/update-prompt branches, and the
 # not-installed download-and-extract paths, that test-install-offline.sh's
-# single fresh-offline-install run never exercises. install_realm calls
-# `exit` directly on several failure paths, so every call here that can hit
-# one of those runs in a subshell to avoid killing the test process.
+# single fresh-offline-install run never exercises. install_realm's three
+# failure paths (unsupported arch, download failure, extract/install
+# failure) used to call `exit` directly, which would have killed this whole
+# test process — every call here that could hit one of those captures
+# output via `$(...)`, which already forks its own subshell regardless, so
+# those calls were incidentally exit-safe either way. They now `return 1`
+# like every other failure path in the function; the dedicated test below
+# calls install_realm with output redirected to a file instead (no
+# subshell) specifically to prove that directly.
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$TESTS_DIR/ptyunit/assert.sh"
 source "$TESTS_DIR/helpers/env.sh"
@@ -164,6 +170,21 @@ chmod +x "$_stub_bin/uname"
 out=$( (PATH="$_stub_bin:$PATH" install_realm <<< "") 2>&1 )
 rc=$?
 rm -rf "$_stub_bin"
+assert_eq "1" "$rc"
+assert_contains "$out" "不支持的CPU架构: sparc64"
+
+test_that "returns (rather than exiting the whole process) on an unsupported architecture"
+_stub_bin="$(mktemp -d /tmp/xwpf-unamestub.XXXXXX)"
+cat > "$_stub_bin/uname" <<'EOF'
+#!/bin/sh
+echo "sparc64"
+EOF
+chmod +x "$_stub_bin/uname"
+tmpout="$(mktemp)"
+PATH="$_stub_bin:$PATH" install_realm > "$tmpout" 2>&1 <<< ""
+rc=$?
+out=$(cat "$tmpout")
+rm -rf "$_stub_bin" "$tmpout"
 assert_eq "1" "$rc"
 assert_contains "$out" "不支持的CPU架构: sparc64"
 

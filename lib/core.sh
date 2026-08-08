@@ -249,6 +249,7 @@ get_public_ip() {
 }
 
 # 支持realm单端口多规则复用，避免误报端口冲突
+# 返回值: 0=端口空闲或用户确认继续 | 1=已被realm占用(复用) | 2=用户取消
 check_port_usage() {
     local port="$1"
     [ -z "$port" ] && return 0
@@ -266,7 +267,7 @@ check_port_usage() {
     echo "$output" | sed 's/^/  /'
 
     read -p "是否继续配置？(y/n): " ans
-    [[ "$ans" =~ ^[Yy]$ ]] || { echo "配置已取消"; exit 1; }
+    [[ "$ans" =~ ^[Yy]$ ]] || { echo "配置已取消"; return 2; }
     return 0
 }
 

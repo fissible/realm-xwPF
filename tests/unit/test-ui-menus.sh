@@ -301,7 +301,12 @@ assert_contains "$out" "负载均衡管理"
 assert_contains "$out" "暂无转发规则"
 
 test_that "dispatches to mptcp_management_menu, which reports lack of kernel support"
-out=$(rules_management_menu <<< "$(printf '7\n\n\n0\n')")
+# check_mptcp_support's own /proc/sys/net/mptcp/enabled read is
+# host-dependent (present and "1" on some hosts, e.g. GitHub Actions'
+# runners, vs. absent on others) — force the "unsupported" branch this test
+# actually wants to exercise rather than relying on the ambient
+# environment, same technique as test-server-mptcp-menu.sh's _stub_unsupported.
+out=$(check_mptcp_support() { return 1; }; rules_management_menu <<< "$(printf '7\n\n\n0\n')")
 assert_contains "$out" "MPTCP 管理"
 assert_contains "$out" "系统不支持MPTCP或未启用"
 

@@ -28,12 +28,19 @@ case "$*" in
         exit 0
         ;;
     "link show")
+        # XWPF_MOCK_IP_LINK_SUFFIX (e.g. "@if621") is appended to the name
+        # reported here ONLY — not to what `addr show` below matches against
+        # — to reproduce real veth-pair interfaces (any container/pod
+        # networking): `ip link show` reports "name@ifNNN", but `ip addr
+        # show name@ifNNN` fails ("Device does not exist"); only the clean
+        # name works. Callers are expected to strip the suffix before
+        # passing it to addr show/mptcp endpoint commands.
         _interfaces
         local_i=1
         for entry in "${_ifaces[@]}"; do
             name="${entry%%:*}"
             [ -z "$name" ] && continue
-            echo "${local_i}: ${name}: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000"
+            echo "${local_i}: ${name}${XWPF_MOCK_IP_LINK_SUFFIX:-}: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000"
             local_i=$((local_i + 1))
         done
         exit 0

@@ -247,7 +247,7 @@ install_realm() {
             *)
                 echo -e "${RED}不支持的CPU架构: ${ARCH}${NC}"
                 echo -e "${YELLOW}支持的架构: x86_64, aarch64, armv7l${NC}"
-                exit 1
+                return 1
                 ;;
         esac
 
@@ -260,7 +260,7 @@ install_realm() {
             download_file="$file_path"
         else
             echo -e "${RED}✗ 下载失败${NC}"
-            exit 1
+            return 1
         fi
     fi
 
@@ -288,7 +288,7 @@ install_realm() {
         restart_realm_service "$service_was_running" true
     else
         echo -e "${RED}✗ 安装失败${NC}"
-        exit 1
+        return 1
     fi
 }
 
