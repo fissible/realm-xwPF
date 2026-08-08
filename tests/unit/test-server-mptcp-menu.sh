@@ -155,15 +155,34 @@ end_describe
 
 describe "mptcp_management_menu" _setup_rules_dir _teardown_rules_dir
 
-# check_mptcp_support is unconditionally false in this container (kernel
-# version can be mocked, but /proc/sys/net/mptcp/enabled never exists here
-# regardless — see test-server-mptcp-helpers.sh). Stubbing it out to "true"
-# per-subshell is the only way to reach mptcp_management_menu's logic past
-# its initial support gate.
-_stub_supported() { check_mptcp_support() { return 0; }; }
+# Whether /proc/sys/net/mptcp/enabled exists at all, and its value if so,
+# varies by host: absent on some sandboxes, but present and "1" on hosts
+# where the kernel enables MPTCP by default (observed on GitHub Actions'
+# runners). check_mptcp_support and mptcp_check_and_persist_config both
+# read it for real, so mptcp_management_menu's behavior can't be pinned
+# down by relying on the ambient environment — every test here must stub
+# both explicitly rather than assume either state.
+#
+# _stub_supported forces check_mptcp_support() true (past the menu's
+# initial support gate) AND forces the proc-file read inside
+# mptcp_check_and_persist_config() to report "not enabled" — otherwise, on
+# a host where it's genuinely "1", that call would take its "already
+# enabled, save permanently?" branch and consume one of each test's input
+# lines meant for the rule-ID/mode-choice prompts instead.
+_stub_supported() {
+    check_mptcp_support() { return 0; }
+    cat() {
+        if command [ "$1" = "/proc/sys/net/mptcp/enabled" ]; then
+            echo "0"
+        else
+            command cat "$@"
+        fi
+    }
+}
+_stub_unsupported() { check_mptcp_support() { return 1; }; }
 
 test_that "reports the unsupported state and returns when MPTCP support is unavailable"
-out=$(mptcp_management_menu <<< $'n\n')
+out=$(_stub_unsupported; mptcp_management_menu <<< $'n\n')
 assert_contains "$out" "MPTCP 管理"
 assert_contains "$out" "系统不支持MPTCP或未启用"
 

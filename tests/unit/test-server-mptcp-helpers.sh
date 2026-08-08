@@ -5,10 +5,14 @@
 #
 # check_mptcp_support/enable_mptcp/disable_mptcp shell out to `ip`/`sysctl`;
 # the mock `ip` at tests/mocks/bin/ip (also installed at /usr/bin/ip, see
-# tests/Dockerfile) makes MPTCP netlink ops deterministic. The container's
-# real kernel never exposes /proc/sys/net/mptcp/enabled, so that branch is
-# permanently unreachable here regardless of mocking (see also lib/rules.sh's
-# equivalent, already documented as an environment-dependent gap).
+# tests/Dockerfile) makes MPTCP netlink ops deterministic.
+#
+# Whether /proc/sys/net/mptcp/enabled exists at all, and its value if so, is
+# host-dependent: absent on some sandboxes, but present and "1" on hosts
+# where the kernel enables MPTCP by default (observed on GitHub Actions'
+# runners). check_mptcp_support's own -f/cat reads of that file must
+# therefore be stubbed (see _stub_proc_absent below) rather than relying on
+# either state being ambiently true.
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$TESTS_DIR/ptyunit/assert.sh"
 source "$TESTS_DIR/helpers/env.sh"
@@ -92,6 +96,40 @@ end_describe
 
 describe "check_mptcp_support"
 
+# See the header comment: /proc/sys/net/mptcp/enabled's presence and value
+# are both host-dependent, so check_mptcp_support's own reads of it must be
+# stubbed deterministically rather than relying on the ambient environment.
+# Same `[`/`cat`-shadowing technique as test-server-mptcp-status.sh's
+# _stub_proc_enabled, just also covering the "absent entirely" case (that
+# file's -f gate has no equivalent need there, since none of its callers
+# gate on -f) and using a local, not global, XWPF_STUB_PROC_VALUE since
+# there's no per-value case to plumb through — command [ / command cat
+# avoid infinite recursion into the overridden functions.
+_stub_proc_absent() {
+    function [ {
+        if command [ "$1" = "-f" ] && command [ "$2" = "/proc/sys/net/mptcp/enabled" ] && command [ "${*: -1}" = "]" ]; then
+            return 1
+        fi
+        command "[" "$@"
+    }
+}
+_stub_proc_enabled() {
+    XWPF_STUB_PROC_VALUE="${1:-1}"
+    function [ {
+        if command [ "$1" = "-f" ] && command [ "$2" = "/proc/sys/net/mptcp/enabled" ] && command [ "${*: -1}" = "]" ]; then
+            return 0
+        fi
+        command "[" "$@"
+    }
+    cat() {
+        if command [ "$1" = "/proc/sys/net/mptcp/enabled" ]; then
+            echo "$XWPF_STUB_PROC_VALUE"
+        else
+            command cat "$@"
+        fi
+    }
+}
+
 test_that "returns 1 (unsupported) when the kernel major version is below 5"
 result=$( (uname() { echo "4.19.0-generic"; }; check_mptcp_support); echo $? )
 assert_eq "1" "$result"
@@ -101,7 +139,16 @@ result=$( (uname() { echo "5.6.0-generic"; }; check_mptcp_support); echo $? )
 assert_eq "1" "$result"
 
 test_that "returns 1 when kernel is new enough but /proc/sys/net/mptcp/enabled is absent"
-assert_false check_mptcp_support
+result=$( (_stub_proc_absent; check_mptcp_support); echo $? )
+assert_eq "1" "$result"
+
+test_that "returns 1 when the proc file exists but reads something other than 1"
+result=$( (_stub_proc_enabled 0; check_mptcp_support); echo $? )
+assert_eq "1" "$result"
+
+test_that "returns 0 (supported) when kernel is new enough and the proc file reads 1"
+result=$( (_stub_proc_enabled 1; check_mptcp_support); echo $? )
+assert_eq "0" "$result"
 
 end_describe
 

@@ -91,7 +91,7 @@ end_describe
 describe "show_mptcp_detailed_status"
 
 test_that "renders the sysctl status, limits, interfaces, and connection sections"
-out=$(XWPF_MOCK_IP_MPTCP_ENDPOINTS="" show_mptcp_detailed_status)
+out=$(_stub_proc_enabled 0; XWPF_MOCK_IP_MPTCP_ENDPOINTS="" show_mptcp_detailed_status)
 assert_contains "$out" "MPTCP详细状态"
 assert_contains "$out" "MPTCP未启用"
 assert_contains "$out" "MPTCP连接限制:"
@@ -138,7 +138,7 @@ _teardown_mptcp_persist() {
 describe "mptcp_check_and_persist_config" xwpf_lock_sysctld _teardown_mptcp_persist
 
 test_that "reports MPTCP is not enabled when the sysctl proc value is not 1"
-out=$(mptcp_check_and_persist_config)
+out=$(_stub_proc_enabled 0; mptcp_check_and_persist_config)
 status=$?
 assert_contains "$out" "系统未开启MPTCP"
 assert_eq "1" "$status"
