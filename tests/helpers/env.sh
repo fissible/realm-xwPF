@@ -225,6 +225,26 @@ xwpf_unlock_realm_config() {
     unset XWPF_REALM_CONFIG_LOCK_FD
 }
 
+# /etc/sysctl.d (another real, hardcoded path with no override hook) is
+# touched directly by test-rules-export.sh (export/import round-trips a
+# 90-enable-MPTCP.conf fixture) and test-server-mptcp-*.sh (which briefly
+# rename the whole directory away to exercise enable_mptcp's/
+# mptcp_check_and_persist_config's "can't create config file" branch).
+# Renaming the directory away is what makes this dangerous under parallel
+# unit-test workers: any other test mid-write to a file under it would fail
+# with "No such file or directory" for the whole window it's gone. Same
+# flock(1) pattern as xwpf_lock_realm_config.
+xwpf_lock_sysctld() {
+    exec {XWPF_SYSCTLD_LOCK_FD}>/tmp/xwpf-sysctld.lock
+    flock "$XWPF_SYSCTLD_LOCK_FD"
+}
+
+xwpf_unlock_sysctld() {
+    [ -n "${XWPF_SYSCTLD_LOCK_FD:-}" ] && flock -u "$XWPF_SYSCTLD_LOCK_FD" 2>/dev/null
+    [ -n "${XWPF_SYSCTLD_LOCK_FD:-}" ] && exec {XWPF_SYSCTLD_LOCK_FD}>&-
+    unset XWPF_SYSCTLD_LOCK_FD
+}
+
 # Reset all real-path state the app touches, between integration test files.
 xwpf_clean_system_state() {
     if [ "${XWPF_ALLOW_SYSTEM_WRITES:-}" != "1" ]; then

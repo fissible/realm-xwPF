@@ -51,6 +51,19 @@ _teardown_rules_dir() {
     [ -n "${RULES_DIR:-}" ] && rm -rf "$RULES_DIR"
 }
 
+# enable_mptcp/disable_mptcp read/write/delete the real, shared
+# /etc/sysctl.d/90-enable-MPTCP.conf path — same file test-rules-export.sh's
+# export/import round-trip touches — so every test here needs
+# xwpf_lock_sysctld held for its duration too, not just _setup_rules_dir.
+_setup_rules_dir_locked() {
+    _setup_rules_dir
+    xwpf_lock_sysctld
+}
+_teardown_rules_dir_locked() {
+    xwpf_unlock_sysctld
+    _teardown_rules_dir
+}
+
 describe "init_mptcp_fields" _setup_rules_dir _teardown_rules_dir
 
 test_that "appends MPTCP_MODE=off to a rule file that doesn't have it yet"
@@ -106,7 +119,7 @@ assert_not_contains "$out" "升级成功"
 
 end_describe
 
-describe "enable_mptcp" _setup_rules_dir _teardown_rules_dir
+describe "enable_mptcp" _setup_rules_dir_locked _teardown_rules_dir_locked
 
 _cleanup_mptcp_conf() {
     rm -f /etc/sysctl.d/90-enable-MPTCP.conf
@@ -159,7 +172,7 @@ mv /etc/sysctl.d.bak /etc/sysctl.d
 
 end_describe
 
-describe "disable_mptcp" _setup_rules_dir _teardown_rules_dir
+describe "disable_mptcp" _setup_rules_dir_locked _teardown_rules_dir_locked
 
 test_that "flushes existing MPTCP endpoints and reports the config file was removed"
 echo "net.mptcp.enabled=1" > /etc/sysctl.d/90-enable-MPTCP.conf

@@ -28,6 +28,7 @@ _run_exit() {
     local tmpout
     tmpout="$(mktemp)"
     configure_exit_server > "$tmpout" 2>&1 <<< "$1"
+    exit_status=$?
     out=$(cat "$tmpout")
     rm -f "$tmpout"
 }
@@ -89,6 +90,25 @@ _run_exit $'8001,8002\n\n1\ny\n\n\n'
 assert_contains "$out" "检测到多端口配置，跳过端口占用检测"
 assert_eq "8001,8002" "$EXIT_LISTEN_PORT"
 
+test_that "returns (rather than exiting the whole process, or silently continuing) when the port-in-use prompt is declined"
+python3 -c "
+import socket, time
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(('127.0.0.1', 48041))
+s.listen(1)
+time.sleep(5)
+" >/dev/null 2>&1 &
+listener_pid=$!
+sleep 0.3
+_run_exit $'48041\nn\n'
+kill "$listener_pid" 2>/dev/null
+wait "$listener_pid" 2>/dev/null
+assert_eq "1" "$exit_status"
+assert_contains "$out" "已被其他服务占用"
+assert_contains "$out" "配置已取消"
+assert_not_contains "$out" "转发目标"
+
 test_that "defaults the forward target to 127.0.0.1 on blank input"
 _run_exit $'47003\n\n1\ny\n\n\n'
 assert_eq "127.0.0.1:1" "$FORWARD_TARGET"
@@ -118,6 +138,11 @@ result=$( (configure_exit_server <<< $'47008\ntest.invalid\n1\nn\n') ; echo "STA
 assert_contains "$result" "检测到您使用的是域名地址"
 assert_contains "$result" "DDNS域名无法进行连通性测试"
 assert_contains "$result" "STATUS:1"
+
+test_that "returns (rather than exiting the whole process) when the connectivity-failure prompt is declined"
+_run_exit $'47017\n127.0.0.1\n1\nn\n'
+assert_eq "1" "$exit_status"
+assert_contains "$out" "配置已取消"
 
 test_that "continues past a failed connectivity check when confirmed"
 _run_exit $'47009\n127.0.0.1\n1\ny\n\n\n'

@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Unit tests for system-detection, dependency-check, and network/port
 # helpers in lib/core.sh that weren't already covered by
-# test-core-validators.sh. Functions that call `exit` on their failure path
-# (check_dependencies "check", check_port_usage's decline branch) are always
-# invoked through a `$(...)` command substitution, which forks its own
-# subshell — that exit only ends the substitution, never this test process.
+# test-core-validators.sh. check_dependencies("check") still calls `exit`
+# directly on its failure path, so it's invoked through a `$(...)` command
+# substitution, which forks its own subshell — that exit only ends the
+# substitution, never this test process. check_port_usage no longer exits on
+# its decline branch (it returns 2 — see lib/core.sh), so it's called
+# directly below to prove that.
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$TESTS_DIR/ptyunit/assert.sh"
 source "$TESTS_DIR/helpers/env.sh"
@@ -293,8 +295,29 @@ out=$(echo "n" | check_port_usage "48001" 2>&1)
 rc=$?
 kill "$listener_pid" 2>/dev/null
 wait "$listener_pid" 2>/dev/null
-assert_eq "1" "$rc"
+assert_eq "2" "$rc"
 assert_contains "$out" "已被其他服务占用"
+assert_contains "$out" "配置已取消"
+
+test_that "returns (rather than exiting the whole process) when declined, called directly with no subshell"
+python3 -c "
+import socket, time
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(('127.0.0.1', 48003))
+s.listen(1)
+time.sleep(5)
+" &
+listener_pid=$!
+sleep 0.3
+tmpout="$(mktemp)"
+check_port_usage "48003" > "$tmpout" 2>&1 <<< "n"
+rc=$?
+out=$(cat "$tmpout")
+rm -f "$tmpout"
+kill "$listener_pid" 2>/dev/null
+wait "$listener_pid" 2>/dev/null
+assert_eq "2" "$rc"
 assert_contains "$out" "配置已取消"
 
 test_that "continues when the user confirms"

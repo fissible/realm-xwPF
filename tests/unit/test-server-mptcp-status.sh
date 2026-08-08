@@ -50,6 +50,11 @@ out=$(XWPF_MOCK_IP_INTERFACES="eth0:10.0.0.5/24:fd00::1/64,eth1::" get_network_i
 assert_contains "$out" "网卡 eth0: 10.0.0.5/24 (IPv4) | fd00::1/64 (IPv6)"
 assert_contains "$out" "网卡 eth1: 未配置IPv4 | 未配置IPv6"
 
+test_that "strips the @ifNNN veth peer-index suffix ip link show reports before querying addresses"
+out=$(XWPF_MOCK_IP_INTERFACES="eth0:10.0.0.5/24:" XWPF_MOCK_IP_LINK_SUFFIX="@if621" get_network_interfaces_detailed)
+assert_contains "$out" "网卡 eth0: 10.0.0.5/24 (IPv4) | 未配置IPv6"
+assert_not_contains "$out" "未配置IPv4"
+
 test_that "flags an interface with a dot in its name as a VLAN"
 out=$(XWPF_MOCK_IP_INTERFACES="eth0.100:10.0.0.5/24:" get_network_interfaces_detailed)
 assert_contains "$out" "(VLAN)"
@@ -120,7 +125,17 @@ _cleanup_mptcp_conf() {
     rm -f /etc/sysctl.d/90-enable-MPTCP.conf
 }
 
-describe "mptcp_check_and_persist_config" "" _cleanup_mptcp_conf
+# mptcp_check_and_persist_config reads/writes/deletes the real, shared
+# /etc/sysctl.d/90-enable-MPTCP.conf path — same file test-rules-export.sh's
+# export/import round-trip touches, and one describe block briefly renames
+# the whole directory away — so every test here needs xwpf_lock_sysctld
+# held for its duration too, not just _cleanup_mptcp_conf.
+_teardown_mptcp_persist() {
+    _cleanup_mptcp_conf
+    xwpf_unlock_sysctld
+}
+
+describe "mptcp_check_and_persist_config" xwpf_lock_sysctld _teardown_mptcp_persist
 
 test_that "reports MPTCP is not enabled when the sysctl proc value is not 1"
 out=$(mptcp_check_and_persist_config)
@@ -167,7 +182,11 @@ mv /etc/sysctl.d.bak /etc/sysctl.d
 
 end_describe
 
-describe "mptcp_handle_unsupported_state"
+# One test below confirms and calls the real enable_mptcp, which touches
+# the same shared /etc/sysctl.d/90-enable-MPTCP.conf path as
+# test-rules-export.sh's export/import round-trip — lock for the whole
+# block rather than special-casing just that one test.
+describe "mptcp_handle_unsupported_state" xwpf_lock_sysctld xwpf_unlock_sysctld
 
 test_that "reports an unsupported-kernel finding and skips enabling when declined"
 result=$( (uname() { echo "4.19.0-generic"; }; mptcp_handle_unsupported_state <<< $'n\n') )

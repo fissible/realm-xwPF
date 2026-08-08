@@ -42,6 +42,7 @@ _run_nat() {
     local tmpout
     tmpout="$(mktemp)"
     configure_nat_server > "$tmpout" 2>&1 <<< "$1"
+    nat_status=$?
     out=$(cat "$tmpout")
     rm -f "$tmpout"
 }
@@ -100,6 +101,24 @@ assert_eq "48020" "$REMOTE_PORT"
 assert_eq "standard" "$SECURITY_LEVEL"
 assert_contains "$out" "未设置备注"
 
+test_that "returns (rather than exiting the whole process) when the port-in-use prompt is declined"
+python3 -c "
+import socket, time
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(('127.0.0.1', 48021))
+s.listen(1)
+time.sleep(5)
+" &
+listener_pid=$!
+sleep 0.3
+_run_nat $'48021\nn\n'
+kill "$listener_pid" 2>/dev/null
+wait "$listener_pid" 2>/dev/null
+assert_eq "1" "$nat_status"
+assert_contains "$out" "已被其他服务占用"
+assert_contains "$out" "配置已取消"
+
 test_that "loops on an invalid listen port until a valid single port is given"
 _run_nat $'99999\n8080\n\n\n127.0.0.1\n1\ny\n\n\n'
 assert_contains "$out" "无效端口号"
@@ -143,6 +162,11 @@ test_that "shows a DDNS hint and aborts when connectivity fails for a domain tar
 result=$( (configure_nat_server <<< $'\n\n\ntest.invalid\n1\nn\n') ; echo "STATUS:$?" )
 assert_contains "$result" "检测到您使用的是域名地址"
 assert_contains "$result" "STATUS:1"
+
+test_that "returns (rather than exiting the whole process) when the connectivity-failure prompt is declined"
+_run_nat $'\n\n\n127.0.0.1\n1\nn\n'
+assert_eq "1" "$nat_status"
+assert_contains "$out" "配置已取消"
 
 test_that "continues past a failed connectivity check when confirmed"
 _run_nat $'\n\n\n127.0.0.1\n1\ny\n\n\n'

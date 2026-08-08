@@ -30,6 +30,16 @@ test_that "rejects an out-of-range selection"
 err=$(XWPF_MOCK_IP_INTERFACES="eth0:10.0.0.5/24:" mptcp_select_interface <<< "9" 2>&1 >/dev/null)
 assert_contains "$err" "无效的选择"
 
+test_that "strips the @ifNNN veth peer-index suffix, both in the listing and the returned name"
+out=$(XWPF_MOCK_IP_INTERFACES="eth0:10.0.0.5/24:" XWPF_MOCK_IP_LINK_SUFFIX="@if621" mptcp_select_interface <<< "1")
+assert_eq "eth0" "$out"
+listing=$(XWPF_MOCK_IP_INTERFACES="eth0:10.0.0.5/24:" XWPF_MOCK_IP_LINK_SUFFIX="@if621" mptcp_select_interface <<< "1" 2>&1 >/dev/null)
+assert_contains "$listing" "eth0: 10.0.0.5 (IPv4)"
+assert_not_contains "$listing" "@if621"
+# and the returned (clean) name must actually work for a downstream address lookup
+ips=$(XWPF_MOCK_IP_INTERFACES="eth0:10.0.0.5/24:" mptcp_select_ips "$out" <<< "")
+assert_contains "$ips" "10.0.0.5"
+
 end_describe
 
 describe "mptcp_select_ips"

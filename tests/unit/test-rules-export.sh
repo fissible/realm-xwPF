@@ -82,6 +82,7 @@ test_that "includes the health status file and MPTCP sysctl config when present"
 _make_relay_rule 1 8001
 HEALTH_STATUS_FILE="$(mktemp /tmp/xwpf-health.XXXXXX)"
 echo "1|127.0.0.1:9000|healthy|0|3|2024-01-01|" > "$HEALTH_STATUS_FILE"
+xwpf_lock_sysctld
 mkdir -p /etc/sysctl.d
 echo "net.mptcp.enabled=1" > /etc/sysctl.d/90-enable-MPTCP.conf
 out=$(export_config_package <<< "y")
@@ -92,6 +93,7 @@ assert_true test -f "${extract_dir}/xwPF_config/health_status.conf"
 assert_true test -f "${extract_dir}/xwPF_config/90-enable-MPTCP.conf"
 rm -rf "$extract_dir"
 rm -f /etc/sysctl.d/90-enable-MPTCP.conf "$HEALTH_STATUS_FILE"
+xwpf_unlock_sysctld
 unset HEALTH_STATUS_FILE
 
 end_describe
@@ -197,6 +199,7 @@ _make_relay_rule 1 8001
 echo "MANAGER_STATE=test" > "$MANAGER_CONF"
 HEALTH_STATUS_FILE="$(mktemp /tmp/xwpf-health.XXXXXX)"
 echo "1|127.0.0.1:9000|healthy|0|3|2024-01-01|" > "$HEALTH_STATUS_FILE"
+xwpf_lock_sysctld
 mkdir -p /etc/sysctl.d
 echo "net.mptcp.enabled=1" > /etc/sysctl.d/90-enable-MPTCP.conf
 export_config_package <<< "y" >/dev/null
@@ -208,6 +211,7 @@ assert_true test -f "$MANAGER_CONF"
 assert_true test -f "$HEALTH_STATUS_FILE"
 assert_true test -f /etc/sysctl.d/90-enable-MPTCP.conf
 rm -f /etc/sysctl.d/90-enable-MPTCP.conf "$HEALTH_STATUS_FILE"
+xwpf_unlock_sysctld
 unset HEALTH_STATUS_FILE
 
 test_that "restores MPTCP endpoint configuration when the package includes it"

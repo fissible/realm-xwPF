@@ -362,7 +362,12 @@ get_mptcp_mode_color() {
 get_network_interfaces_detailed() {
     local interfaces_info=""
 
-    for interface in $(ip link show | grep -E '^[0-9]+:' | cut -d: -f2 | tr -d ' ' | grep -v lo); do
+    # `ip link show` reports veth-style interfaces (i.e. any container/pod
+    # networking) as "name@ifNNN" — the peer-index suffix; `ip addr show`
+    # rejects that suffixed form ("Device does not exist"), so strip it here
+    # once, at the source, before it's used for any addr lookup or `dev`
+    # argument downstream.
+    for interface in $(ip link show | grep -E '^[0-9]+:' | cut -d: -f2 | tr -d ' ' | sed 's/@.*//' | grep -v lo); do
         local ipv4_info=""
         local ipv6_info=""
 
@@ -776,7 +781,12 @@ mptcp_select_interface() {
     local interface_names=()
     local interface_count=0
 
-    for interface in $(ip link show | grep -E '^[0-9]+:' | cut -d: -f2 | tr -d ' ' | grep -v lo); do
+    # `ip link show` reports veth-style interfaces (i.e. any container/pod
+    # networking) as "name@ifNNN" — the peer-index suffix; `ip addr show`
+    # rejects that suffixed form ("Device does not exist"), so strip it here
+    # once, at the source, before it's used for any addr lookup or `dev`
+    # argument downstream.
+    for interface in $(ip link show | grep -E '^[0-9]+:' | cut -d: -f2 | tr -d ' ' | sed 's/@.*//' | grep -v lo); do
         local ipv4_addrs=$(ip -4 addr show "$interface" 2>/dev/null | grep -oP 'inet \K[^/]+' | tr '\n' ' ')
         local ipv6_addrs=$(ip -6 addr show "$interface" 2>/dev/null | grep -oP 'inet6 \K[^/]+' | grep -v '^fe80:' | tr '\n' ' ')
 
@@ -1163,6 +1173,11 @@ done
         port_status=$?
     fi
 
+    # 用户在端口占用提示中选择了取消
+    if [ $port_status -eq 2 ]; then
+        return 1
+    fi
+
     # 如果端口被realm占用，跳过IP地址、协议、传输方式配置
     if [ $port_status -eq 1 ]; then
         echo -e "${BLUE}检测到端口已被realm占用，读取现有配置，直接进入出口服务器配置${NC}"
@@ -1300,7 +1315,7 @@ done
         read -p "是否继续配置？(y/n): " continue_config
         if [[ ! "$continue_config" =~ ^[Yy]$ ]]; then
             echo "配置已取消"
-            exit 1
+            return 1
         fi
     fi
 
@@ -1500,6 +1515,8 @@ configure_exit_server() {
     else
 
         check_port_usage "$EXIT_LISTEN_PORT" "出口服务器监听"
+        # 用户在端口占用提示中选择了取消
+        [ $? -eq 2 ] && return 1
     fi
 
     echo ""
@@ -1594,7 +1611,7 @@ configure_exit_server() {
         read -p "是否继续配置？(y/n): " continue_config
         if [[ ! "$continue_config" =~ ^[Yy]$ ]]; then
             echo "配置已取消"
-            exit 1
+            return 1
         fi
     else
         echo -e "${GREEN}✓ 所有转发目标连接测试成功！${NC}"
