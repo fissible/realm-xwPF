@@ -49,7 +49,7 @@ _run_nat() {
 _setup_nat() {
     RULES_DIR="$(mktemp -d /tmp/xwpftestrules.XXXXXX)"
     unset NAT_LISTEN_PORT NAT_LISTEN_IP NAT_THROUGH_IP REMOTE_IP REMOTE_PORT \
-        SECURITY_LEVEL WS_HOST WS_PATH TLS_SERVER_NAME RULE_NOTE
+        SECURITY_LEVEL WS_HOST WS_PATH TLS_SERVER_NAME RULE_NOTE PROTOCOL
 }
 _teardown_nat() {
     [ -n "${RULES_DIR:-}" ] && rm -rf "$RULES_DIR"
@@ -101,36 +101,36 @@ assert_eq "standard" "$SECURITY_LEVEL"
 assert_contains "$out" "未设置备注"
 
 test_that "loops on an invalid listen port until a valid single port is given"
-_run_nat $'99999\n8080\n\n\n127.0.0.1\n1\ny\n\n\n'
+_run_nat $'99999\n8080\n\n\n127.0.0.1\n1\n\ny\n\n\n'
 assert_contains "$out" "无效端口号"
 assert_eq "8080" "$NAT_LISTEN_PORT"
 
 test_that "accepts a custom listen IP and loops past an invalid one first"
-_run_nat $'\n not@ip!!\n192.168.1.50\n\n127.0.0.1\n1\ny\n\n\n'
+_run_nat $'\n not@ip!!\n192.168.1.50\n\n127.0.0.1\n1\n\ny\n\n\n'
 assert_contains "$out" "无效IP地址或网卡名称格式"
 assert_eq "192.168.1.50" "$NAT_LISTEN_IP"
 
 test_that "accepts an interface name for the through IP"
-_run_nat $'\n\neth0\n127.0.0.1\n1\ny\n\n\n'
+_run_nat $'\n\neth0\n127.0.0.1\n1\n\ny\n\n\n'
 assert_eq "eth0" "$NAT_THROUGH_IP"
 assert_contains "$out" "出口网卡设置为"
 
 test_that "detects a multi-port listen input and skips the port-usage check"
-_run_nat $'8001,8002\n\n\n127.0.0.1\n1\ny\n\n\n'
+_run_nat $'8001,8002\n\n\n127.0.0.1\n1\n\ny\n\n\n'
 assert_contains "$out" "检测到多端口配置，跳过端口占用检测"
 assert_eq "8001,8002" "$NAT_LISTEN_PORT"
 
 test_that "rejects an empty remote address before accepting a valid one"
-_run_nat $'\n\n\n\n10.0.0.5\n1\ny\n\n\n'
+_run_nat $'\n\n\n\n10.0.0.5\n1\n\ny\n\n\n'
 assert_contains "$out" "IP地址或域名不能为空"
 assert_eq "10.0.0.5" "$REMOTE_IP"
 
 test_that "loops on an invalid remote address until a valid IP or domain is given"
-_run_nat $'\n\n\nnot valid!!\n10.0.0.5\n1\ny\n\n\n'
+_run_nat $'\n\n\nnot valid!!\n10.0.0.5\n1\n\ny\n\n\n'
 assert_contains "$out" "请输入有效的IP地址或域名"
 
 test_that "loops on an invalid remote port until a valid one is given"
-_run_nat $'\n\n\n127.0.0.1\n999999\n1\ny\n\n\n'
+_run_nat $'\n\n\n127.0.0.1\n999999\n1\n\ny\n\n\n'
 assert_contains "$out" "无效端口号"
 assert_eq "1" "$REMOTE_PORT"
 
@@ -145,49 +145,62 @@ assert_contains "$result" "检测到您使用的是域名地址"
 assert_contains "$result" "STATUS:1"
 
 test_that "continues past a failed connectivity check when confirmed"
-_run_nat $'\n\n\n127.0.0.1\n1\ny\n\n\n'
+_run_nat $'\n\n\n127.0.0.1\n1\n\ny\n\n\n'
 assert_contains "$out" "连接测试失败"
 assert_contains "$out" "已选择: 默认传输"
 
 test_that "loops on an invalid transport choice until a valid one is given"
-_run_nat $'\n\n\n127.0.0.1\n1\ny\n9\n1\n\n'
+_run_nat $'\n\n\n127.0.0.1\n1\n\ny\n9\n1\n\n'
 assert_contains "$out" "无效选择，请输入 1-6"
 assert_eq "standard" "$SECURITY_LEVEL"
 
 test_that "configures WebSocket transport with default host/path on blank input"
-_run_nat $'\n\n\n127.0.0.1\n1\ny\n2\n\n\n\n'
+_run_nat $'\n\n\n127.0.0.1\n1\n\ny\n2\n\n\n\n'
 assert_eq "ws" "$SECURITY_LEVEL"
 assert_eq "$DEFAULT_SNI_DOMAIN" "$WS_HOST"
 assert_eq "/ws" "$WS_PATH"
 
 test_that "configures TLS self-signed transport with a default SNI on blank input"
-_run_nat $'\n\n\n127.0.0.1\n1\ny\n3\n\n\n'
+_run_nat $'\n\n\n127.0.0.1\n1\n\ny\n3\n\n\n'
 assert_eq "tls_self" "$SECURITY_LEVEL"
 assert_eq "$DEFAULT_SNI_DOMAIN" "$TLS_SERVER_NAME"
 
 test_that "configures TLS CA transport with a custom SNI"
-_run_nat $'\n\n\n127.0.0.1\n1\ny\n4\nca.example.com\n\n'
+_run_nat $'\n\n\n127.0.0.1\n1\n\ny\n4\nca.example.com\n\n'
 assert_eq "tls_ca" "$SECURITY_LEVEL"
 assert_eq "ca.example.com" "$TLS_SERVER_NAME"
 assert_contains "$out" "TLS配置完成"
 
 test_that "configures TLS+WebSocket self-signed transport with a custom host and default SNI/path"
-_run_nat $'\n\n\n127.0.0.1\n1\ny\n5\nwshost.example.com\n\n\n\n'
+_run_nat $'\n\n\n127.0.0.1\n1\n\ny\n5\nwshost.example.com\n\n\n\n'
 assert_eq "ws_tls_self" "$SECURITY_LEVEL"
 assert_eq "wshost.example.com" "$WS_HOST"
 assert_eq "$DEFAULT_SNI_DOMAIN" "$TLS_SERVER_NAME"
 assert_eq "/ws" "$WS_PATH"
 
 test_that "configures TLS+WebSocket CA transport with a custom SNI and path"
-_run_nat $'\n\n\n127.0.0.1\n1\ny\n6\n\nca2.example.com\n/customws\n\n'
+_run_nat $'\n\n\n127.0.0.1\n1\n\ny\n6\n\nca2.example.com\n/customws\n\n'
 assert_eq "ws_tls_ca" "$SECURITY_LEVEL"
 assert_eq "$DEFAULT_SNI_DOMAIN" "$WS_HOST"
 assert_eq "ca2.example.com" "$TLS_SERVER_NAME"
 assert_eq "/customws" "$WS_PATH"
 assert_contains "$out" "TLS+WebSocket配置完成"
 
+test_that "loops on an invalid forwarding-protocol choice, then accepts TCP-only"
+_run_nat $'\n\n\n127.0.0.1\n1\n7\n2\ny\n\n\n'
+assert_contains "$out" "无效选择，请输入 1-3"
+assert_contains "$out" "已选择: 仅 TCP"
+assert_eq "tcp" "$PROTOCOL"
+
+test_that "UDP-only skips the transport menu and forces the standard transport"
+_run_nat $'\n\n\n127.0.0.1\n1\n3\ny\n\n'
+assert_contains "$out" "纯 UDP 无需传输加密"
+assert_not_contains "$out" "请选择传输模式"
+assert_eq "udp" "$PROTOCOL"
+assert_eq "standard" "$SECURITY_LEVEL"
+
 test_that "sets a custom rule note when none exists yet"
-_run_nat $'\n\n\n127.0.0.1\n1\ny\n\nmy custom note\n'
+_run_nat $'\n\n\n127.0.0.1\n1\n\ny\n\nmy custom note\n'
 assert_eq "my custom note" "$RULE_NOTE"
 assert_contains "$out" "备注设置为: my custom note"
 

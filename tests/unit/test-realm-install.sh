@@ -55,8 +55,12 @@ assert_contains "$out" "realm 安装成功"
 
 test_that "does nothing further when the installed version already matches the latest"
 xwpf_seed_fake_realm_binary
+# The fixture reports 2.9.4; pin the "latest" lookup to it so the test doesn't
+# depend on REALM_VERSION in lib/core.sh (bumped by upstream's release cron).
+get_latest_realm_version() { echo "v2.9.4"; }
 out=$(install_realm </dev/null 2>&1)
 rc=$?
+source "$XWPF_REPO_ROOT/lib/realm.sh"
 assert_eq "0" "$rc"
 assert_contains "$out" "当前版本已是最新版本"
 assert_not_contains "$out" "正在解压安装"
@@ -103,7 +107,9 @@ case "${1:-}" in
 esac
 EOF
 chmod +x /usr/local/bin/realm
+get_latest_realm_version() { echo "v2.9.4"; }
 out=$(install_realm </dev/null 2>&1)
+source "$XWPF_REPO_ROOT/lib/realm.sh"
 assert_contains "$out" "via -v"
 assert_contains "$out" "当前版本已是最新版本"
 
@@ -167,7 +173,7 @@ rm -rf "$_stub_bin"
 assert_eq "1" "$rc"
 assert_contains "$out" "不支持的CPU架构: sparc64"
 
-test_that "maps x86_64 to the x86_64-unknown-linux-gnu release asset name"
+test_that "maps x86_64 to the x86_64-unknown-linux-musl release asset name"
 _stub_bin="$(mktemp -d /tmp/xwpf-unamestub.XXXXXX)"
 printf '#!/bin/sh\necho "x86_64"\n' > "$_stub_bin/uname"
 chmod +x "$_stub_bin/uname"
@@ -175,9 +181,9 @@ out=$( (PATH="$_stub_bin:$PATH" install_realm <<< "") 2>&1 )
 rc=$?
 rm -rf "$_stub_bin"
 assert_eq "1" "$rc"
-assert_contains "$out" "realm-x86_64-unknown-linux-gnu.tar.gz"
+assert_contains "$out" "realm-x86_64-unknown-linux-musl.tar.gz"
 
-test_that "maps aarch64 to the aarch64-unknown-linux-gnu release asset name"
+test_that "maps aarch64 to the aarch64-unknown-linux-musl release asset name"
 _stub_bin="$(mktemp -d /tmp/xwpf-unamestub.XXXXXX)"
 printf '#!/bin/sh\necho "aarch64"\n' > "$_stub_bin/uname"
 chmod +x "$_stub_bin/uname"
@@ -185,9 +191,9 @@ out=$( (PATH="$_stub_bin:$PATH" install_realm <<< "") 2>&1 )
 rc=$?
 rm -rf "$_stub_bin"
 assert_eq "1" "$rc"
-assert_contains "$out" "realm-aarch64-unknown-linux-gnu.tar.gz"
+assert_contains "$out" "realm-aarch64-unknown-linux-musl.tar.gz"
 
-test_that "maps armv7l to the armv7-unknown-linux-gnueabihf release asset name"
+test_that "maps armv7l to the armv7-unknown-linux-musleabihf release asset name"
 _stub_bin="$(mktemp -d /tmp/xwpf-unamestub.XXXXXX)"
 printf '#!/bin/sh\necho "armv7l"\n' > "$_stub_bin/uname"
 chmod +x "$_stub_bin/uname"
@@ -195,17 +201,17 @@ out=$( (PATH="$_stub_bin:$PATH" install_realm <<< "") 2>&1 )
 rc=$?
 rm -rf "$_stub_bin"
 assert_eq "1" "$rc"
-assert_contains "$out" "realm-armv7-unknown-linux-gnueabihf.tar.gz"
+assert_contains "$out" "realm-armv7-unknown-linux-musleabihf.tar.gz"
 
-test_that "uses the musl asset suffix when /etc/alpine-release is present"
-if [ "${XWPF_ALLOW_SYSTEM_WRITES:-}" = "1" ]; then
-    touch /etc/alpine-release
-    out=$( (install_realm <<< "") 2>&1 )
-    rc=$?
-    rm -f /etc/alpine-release
-    assert_eq "1" "$rc"
-    assert_contains "$out" "-musl.tar.gz"
-fi
+test_that "maps armv6l to the arm-unknown-linux-musleabihf release asset name"
+_stub_bin="$(mktemp -d /tmp/xwpf-unamestub.XXXXXX)"
+printf '#!/bin/sh\necho "armv6l"\n' > "$_stub_bin/uname"
+chmod +x "$_stub_bin/uname"
+out=$( (PATH="$_stub_bin:$PATH" install_realm <<< "") 2>&1 )
+rc=$?
+rm -rf "$_stub_bin"
+assert_eq "1" "$rc"
+assert_contains "$out" "realm-arm-unknown-linux-musleabihf.tar.gz"
 
 test_that "auto-downloads and installs successfully when curl serves the release tarball"
 _tarball="$(xwpf_build_fake_realm_tarball)"

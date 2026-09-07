@@ -73,16 +73,38 @@ out=$(generate_service_file 2>&1)
 rm -f /etc/systemd/system/realm.service
 assert_contains "$out" "systemd 服务文件已生成"
 
-test_that "generates an OpenRC init script when INIT_SYSTEM=openrc"
+test_that "generates a supervise-daemon OpenRC init script when INIT_SYSTEM=openrc and supervise-daemon is available"
+if [ "${XWPF_ALLOW_SYSTEM_WRITES:-}" = "1" ]; then
+    _stub_bin="$(mktemp -d /tmp/xwpf-svdstub.XXXXXX)"
+    printf '#!/bin/sh\nexit 0\n' > "$_stub_bin/supervise-daemon"
+    chmod +x "$_stub_bin/supervise-daemon"
+    out=$(PATH="$_stub_bin:$PATH" INIT_SYSTEM="openrc" generate_service_file 2>&1)
+    rc_ok=$?
+    rm -rf "$_stub_bin"
+    file_exists=false
+    [ -f /etc/init.d/realm ] && file_exists=true
+    script=$(cat /etc/init.d/realm 2>/dev/null)
+    rm -f /etc/init.d/realm
+    assert_eq "0" "$rc_ok"
+    assert_contains "$out" "OpenRC 服务文件已生成"
+    assert_true test "$file_exists" = "true"
+    assert_contains "$script" 'supervisor="supervise-daemon"'
+    assert_not_contains "$script" "command_background"
+fi
+
+test_that "falls back to a plain background OpenRC init script when supervise-daemon is missing"
 if [ "${XWPF_ALLOW_SYSTEM_WRITES:-}" = "1" ]; then
     out=$(INIT_SYSTEM="openrc" generate_service_file 2>&1)
     rc_ok=$?
     file_exists=false
     [ -f /etc/init.d/realm ] && file_exists=true
+    script=$(cat /etc/init.d/realm 2>/dev/null)
     rm -f /etc/init.d/realm
     assert_eq "0" "$rc_ok"
-    assert_contains "$out" "OpenRC 服务文件已生成"
+    assert_contains "$out" "无 supervise-daemon"
     assert_true test "$file_exists" = "true"
+    assert_contains "$script" "command_background=true"
+    assert_not_contains "$script" "supervise-daemon"
 fi
 
 end_describe

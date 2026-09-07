@@ -154,6 +154,7 @@ out=$(edit_nat_server_config "${RULES_DIR}/rule-1.conf" <<'EOF'
 10.0.0.1
 example.com
 9100
+
 hello world
 EOF
 )
@@ -164,7 +165,45 @@ assert_eq "192.168.1.1" "$LISTEN_IP"
 assert_eq "10.0.0.1" "$THROUGH_IP"
 assert_eq "example.com" "$REMOTE_HOST"
 assert_eq "9100" "$REMOTE_PORT"
+assert_eq "both" "$PROTOCOL"
 assert_eq "hello world" "$RULE_NOTE"
+
+test_that "selects a TCP-only forwarding protocol, looping past an invalid choice, and appends PROTOCOL when missing"
+_make_relay_rule 1 8001
+out=$(edit_nat_server_config "${RULES_DIR}/rule-1.conf" <<'EOF'
+
+
+
+
+
+7
+2
+
+EOF
+)
+assert_contains "$out" "无效选择，请输入 1-3"
+assert_contains "$out" "已选择: 仅 TCP"
+read_rule_file "${RULES_DIR}/rule-1.conf"
+assert_eq "tcp" "$PROTOCOL"
+assert_eq "standard" "$SECURITY_LEVEL"
+
+test_that "switching to UDP-only downgrades an encrypted transport to standard"
+_make_relay_rule 1 8001
+sed -i 's/^SECURITY_LEVEL=.*/SECURITY_LEVEL=ws/' "${RULES_DIR}/rule-1.conf"
+out=$(edit_nat_server_config "${RULES_DIR}/rule-1.conf" <<'EOF'
+
+
+
+
+
+3
+
+EOF
+)
+assert_contains "$out" "纯 UDP 不支持 ws/tls 加密传输"
+read_rule_file "${RULES_DIR}/rule-1.conf"
+assert_eq "udp" "$PROTOCOL"
+assert_eq "standard" "$SECURITY_LEVEL"
 
 test_that "balance-mode rule: changing the listen port with 2+ remaining targets syncs the old port group instead of disabling it"
 _make_relay_rule 1 8001
@@ -301,6 +340,20 @@ read_rule_file "${RULES_DIR}/rule-1.conf"
 assert_eq "8200" "$LISTEN_PORT"
 assert_eq "example.com:9300" "$FORWARD_TARGET"
 assert_eq "hello world" "$RULE_NOTE"
+
+test_that "selects a UDP-only forwarding protocol and appends PROTOCOL when missing"
+_make_exit_rule 1 8101
+out=$(edit_exit_server_config "${RULES_DIR}/rule-1.conf" <<'EOF'
+
+
+
+
+3
+EOF
+)
+assert_contains "$out" "已选择: 仅 UDP"
+read_rule_file "${RULES_DIR}/rule-1.conf"
+assert_eq "udp" "$PROTOCOL"
 
 end_describe
 

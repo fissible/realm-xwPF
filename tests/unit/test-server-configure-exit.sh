@@ -35,7 +35,7 @@ _run_exit() {
 _setup_exit() {
     RULES_DIR="$(mktemp -d /tmp/xwpftestrules.XXXXXX)"
     unset EXIT_LISTEN_PORT FORWARD_TARGET SECURITY_LEVEL WS_HOST WS_PATH \
-        TLS_SERVER_NAME TLS_CERT_PATH TLS_KEY_PATH RULE_NOTE
+        TLS_SERVER_NAME TLS_CERT_PATH TLS_KEY_PATH RULE_NOTE PROTOCOL
 }
 _teardown_exit() {
     [ -n "${RULES_DIR:-}" ] && rm -rf "$RULES_DIR"
@@ -76,35 +76,35 @@ assert_contains "$out" "所有转发目标连接测试成功"
 assert_contains "$out" "未设置备注"
 
 test_that "reports being unable to auto-detect a public IP when both lookups fail"
-_run_exit $'47001\n127.0.0.1\n1\ny\n\n\n'
+_run_exit $'47001\n127.0.0.1\n1\ny\n\n\n\n'
 assert_contains "$out" "无法自动获取公网IP，请手动确认"
 
 test_that "loops on an invalid listen port until a valid one is given"
-_run_exit $'99999\n47002\n\n1\ny\n\n\n'
+_run_exit $'99999\n47002\n\n1\ny\n\n\n\n'
 assert_contains "$out" "无效端口号"
 assert_eq "47002" "$EXIT_LISTEN_PORT"
 
 test_that "detects a multi-port listen input and skips the port-usage check"
-_run_exit $'8001,8002\n\n1\ny\n\n\n'
+_run_exit $'8001,8002\n\n1\ny\n\n\n\n'
 assert_contains "$out" "检测到多端口配置，跳过端口占用检测"
 assert_eq "8001,8002" "$EXIT_LISTEN_PORT"
 
 test_that "defaults the forward target to 127.0.0.1 on blank input"
-_run_exit $'47003\n\n1\ny\n\n\n'
+_run_exit $'47003\n\n1\ny\n\n\n\n'
 assert_eq "127.0.0.1:1" "$FORWARD_TARGET"
 assert_contains "$out" "转发目标设置为: 127.0.0.1"
 
 test_that "loops on an invalid forward target address before accepting a valid one"
-_run_exit $'47004\nnot a target!!\nlocalhost\n1\ny\n\n\n'
+_run_exit $'47004\nnot a target!!\nlocalhost\n1\ny\n\n\n\n'
 assert_contains "$out" "无效地址格式"
 assert_eq "localhost:1" "$FORWARD_TARGET"
 
 test_that "accepts a comma-separated multi-address forward target"
-_run_exit $'47005\n127.0.0.1,localhost\n1\ny\n\n\n'
+_run_exit $'47005\n127.0.0.1,localhost\n1\ny\n\n\n\n'
 assert_eq "127.0.0.1,localhost:1" "$FORWARD_TARGET"
 
 test_that "loops on an invalid forward port until a valid one is given"
-_run_exit $'47006\n127.0.0.1\n999999\n1\ny\n\n\n'
+_run_exit $'47006\n127.0.0.1\n999999\n1\ny\n\n\n\n'
 assert_contains "$out" "无效端口号"
 assert_eq "127.0.0.1:1" "$FORWARD_TARGET"
 
@@ -120,30 +120,30 @@ assert_contains "$result" "DDNS域名无法进行连通性测试"
 assert_contains "$result" "STATUS:1"
 
 test_that "continues past a failed connectivity check when confirmed"
-_run_exit $'47009\n127.0.0.1\n1\ny\n\n\n'
+_run_exit $'47009\n127.0.0.1\n1\ny\n\n\n\n'
 assert_contains "$out" "连接失败"
 assert_contains "$out" "已选择: 默认传输"
 
 test_that "loops on an invalid transport choice until a valid one is given"
-_run_exit $'47010\n127.0.0.1\n1\ny\n9\n1\n\n'
+_run_exit $'47010\n127.0.0.1\n1\ny\n\n9\n1\n\n'
 assert_contains "$out" "无效选择，请输入 1-6"
 assert_eq "standard" "$SECURITY_LEVEL"
 
 test_that "configures WebSocket transport with default host/path on blank input"
-_run_exit $'47011\n127.0.0.1\n1\ny\n2\n\n\n\n'
+_run_exit $'47011\n127.0.0.1\n1\ny\n\n2\n\n\n\n'
 assert_eq "ws" "$SECURITY_LEVEL"
 assert_eq "$DEFAULT_SNI_DOMAIN" "$WS_HOST"
 assert_eq "/ws" "$WS_PATH"
 
 test_that "configures TLS self-signed transport with a default SNI on blank input"
-_run_exit $'47012\n127.0.0.1\n1\ny\n3\n\n\n'
+_run_exit $'47012\n127.0.0.1\n1\ny\n\n3\n\n\n'
 assert_eq "tls_self" "$SECURITY_LEVEL"
 assert_eq "$DEFAULT_SNI_DOMAIN" "$TLS_SERVER_NAME"
 
 test_that "loops on non-existent cert/key file paths before accepting real ones for TLS CA transport"
 cert_file="$(mktemp)"
 key_file="$(mktemp)"
-_run_exit $'47013\n127.0.0.1\n1\ny\n4\n/no/such/cert\n'"$cert_file"$'\n/no/such/key\n'"$key_file"$'\n\n'
+_run_exit $'47013\n127.0.0.1\n1\ny\n\n4\n/no/such/cert\n'"$cert_file"$'\n/no/such/key\n'"$key_file"$'\n\n'
 rm -f "$cert_file" "$key_file"
 assert_contains "$out" "证书文件不存在"
 assert_contains "$out" "私钥文件不存在"
@@ -153,7 +153,7 @@ assert_eq "$key_file" "$TLS_KEY_PATH"
 assert_contains "$out" "TLS配置完成"
 
 test_that "configures TLS+WebSocket self-signed transport with a custom host and default SNI/path"
-_run_exit $'47014\n127.0.0.1\n1\ny\n5\nwshost.example.com\n\n\n\n'
+_run_exit $'47014\n127.0.0.1\n1\ny\n\n5\nwshost.example.com\n\n\n\n'
 assert_eq "ws_tls_self" "$SECURITY_LEVEL"
 assert_eq "wshost.example.com" "$WS_HOST"
 assert_eq "$DEFAULT_SNI_DOMAIN" "$TLS_SERVER_NAME"
@@ -162,7 +162,7 @@ assert_eq "/ws" "$WS_PATH"
 test_that "configures TLS+WebSocket CA transport with cert/key files and a custom path"
 cert_file="$(mktemp)"
 key_file="$(mktemp)"
-_run_exit $'47015\n127.0.0.1\n1\ny\n6\n\n'"$cert_file"$'\n'"$key_file"$'\n/customws\n\n'
+_run_exit $'47015\n127.0.0.1\n1\ny\n\n6\n\n'"$cert_file"$'\n'"$key_file"$'\n/customws\n\n'
 rm -f "$cert_file" "$key_file"
 assert_eq "ws_tls_ca" "$SECURITY_LEVEL"
 assert_eq "$DEFAULT_SNI_DOMAIN" "$WS_HOST"
@@ -172,9 +172,27 @@ assert_eq "/customws" "$WS_PATH"
 assert_contains "$out" "TLS+WebSocket配置完成"
 
 test_that "sets a custom rule note"
-_run_exit $'47016\n127.0.0.1\n1\ny\n\nmy exit note\n'
+_run_exit $'47016\n127.0.0.1\n1\ny\n\n\nmy exit note\n'
 assert_eq "my exit note" "$RULE_NOTE"
 assert_contains "$out" "备注设置为: my exit note"
+
+test_that "defaults to the TCP+UDP forwarding protocol on blank input"
+_run_exit $'47017\n127.0.0.1\n1\ny\n\n\n\n'
+assert_contains "$out" "已选择: TCP+UDP 双栈"
+assert_eq "both" "$PROTOCOL"
+
+test_that "loops on an invalid forwarding-protocol choice, then accepts TCP-only"
+_run_exit $'47018\n127.0.0.1\n1\ny\n7\n2\n\n\n'
+assert_contains "$out" "无效选择，请输入 1-3"
+assert_contains "$out" "已选择: 仅 TCP"
+assert_eq "tcp" "$PROTOCOL"
+
+test_that "UDP-only skips the transport menu and forces the standard transport"
+_run_exit $'47019\n127.0.0.1\n1\ny\n3\n\n'
+assert_contains "$out" "纯 UDP 无需传输加密"
+assert_not_contains "$out" "请选择传输模式"
+assert_eq "udp" "$PROTOCOL"
+assert_eq "standard" "$SECURITY_LEVEL"
 
 end_describe
 
